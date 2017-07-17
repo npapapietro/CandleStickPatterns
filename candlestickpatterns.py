@@ -1,3 +1,77 @@
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from matplotlib.finance import candlestick_ohlc
+import matplotlib.dates as mdates
+import pandas as pd
+import quandl
+from datetime import datetime, timedelta
+import numpy as np
+
+def pattern_generate(df):
+    '''
+        Example function of generating a pandas DataFrame with entries that
+        satisify our given pattern
+    '''
+
+    df=df.reset_index()
+    df=df.ix[:,['Date','Open','High','Low','Close']]
+
+
+    dates = []
+
+    for j in range(100,len(df)-1):
+        previous = df.iloc[j-6:j-3].values
+        trend = trend_identifier(previous)
+        data = df.iloc[j-3:j]
+        if triple_star_patterns(data.iloc[0].values,data.iloc[1].values,data.iloc[2].values,trend=trend):
+            dates.append(data)
+    return pd.concat(dates)
+
+
+def candlestick_plot(df, Bollinger_Bands = False, Highlight = None):
+    '''Uses matplotlib.finance candlestick_ohlc plot. This is compatable
+    with Quandl's get() format.
+
+    Args:
+        pandas.dataframe: df
+        Bollinger_Bands: bool
+
+    '''
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111) #.subplot2grid((1,1), (0,0))
+    ax2 = fig.add_subplot(111)
+    ax1.xaxis_date()
+    plt.xlabel("Date")
+    plt.ylabel("Price")
+    for label in ax1.xaxis.get_ticklabels():
+        label.set_rotation(45)
+
+    bars = df
+    bars=bars.reset_index()
+    bars = bars.ix[:,['Date','Open','High','Low','Close']]
+    bars['Date'] = pd.to_datetime(bars['Date'],unit='s')
+    bars['Date'] = bars['Date'].map(mdates.date2num)
+
+    candlestick_ohlc(ax1,bars.values,width=.5, colorup='g', colordown='k',alpha=0.75)
+
+    if Bollinger_Bands:
+        df['20MA'] = df['Close'].rolling(window=20).mean()
+        df['20SD'] = df['Close'].rolling(window=20).std()
+        df['Upper Band'] = df['20MA'] + 2 * df['20SD']
+        df['Lower Band'] = df['20MA'] - 2 * df['20SD']
+        df=df.reset_index()
+        bands = df.ix[:,['20MA','Upper Band','Lower Band']]
+        MA = [bands['20MA'].as_matrix(),bands['Upper Band'].as_matrix(), bands['Lower Band'].as_matrix()]
+
+        for band in MA:
+             ax2.plot(bars['Date'], band)
+
+    if Highlight is not None:
+        dates = Highlight['Date'].map(mdates.date2num)
+        for i in dates:
+            plt.axvline(x=i,ymin=0,ymax=3000, color='red', alpha = 0.25)
+
+    plt.show()
 
 ''' helper functions '''
 
@@ -24,7 +98,6 @@ def body_form(data):
     else:
         return data[2] - data[4], 0, data[1] - data[3], ''
 
-
 def relative_dif(point1,point2):
     ''' Relative difference between two points
     Args:
@@ -35,24 +108,20 @@ def relative_dif(point1,point2):
 
     return 2 * abs(point1-point2) / (point1 + point2)
 
-
-def trend_identifier(*args):
-    ''' Identifies if \* args are positive or negative slope based on their body midpoints
+def trend_identifier(args):
+    ''' Identifies if \* args are positive or negative slope based on their close
 
     Args:
-        list or mutliple [string: date, float: open, float: high, float: low, float: close]
+        list of [string: date, float: open, float: high, float: low, float: close]
 
     Returns:
         string: 'uptrend', string: 'downtrend' or None
 
     '''
-
     body_array = []
 
     for entry in args:
-        ushadow, body, lshadow, animal = body_form(entry)
-        body_midpoint = entry[3] + lshadow + 0.5 * body
-        body_array.append(body_midpoint)
+        body_array.append(entry[4]) #close value
 
     upward = all(b >= a for a, b in zip(body_array, body_array[1:]))
     downward = all(b <= a for a, b in zip(body_array, body_array[1:]))
@@ -63,7 +132,6 @@ def trend_identifier(*args):
         return 'downtrend'
     else:
         return None
-
 
 def smart_return(cond1, cond2):
     ''' Helper function to determine return type of pattern functions
@@ -102,26 +170,26 @@ def spinning_top(data, percent_classifier = 3.0):
     Returns:
         bool
     '''
-  high = data[2]
-  low = data[3]
-  open_ = data[1]
-  close = data[4]
+    high = data[2]
+    low = data[3]
+    open_ = data[1]
+    close = data[4]
 
-  if open_ > close:
-    ushadow = high-open_
-    lshadow = close-low
-    diff = relative_dif(ushadow,lshadow) * 100
-  else:
-    ushadow = high-close
-    lshadow = open_-low
-    diff = relative_dif(ushadow,lshadow) * 100
+    if open_ > close:
+        ushadow = high-open_
+        lshadow = close-low
+        diff = relative_dif(ushadow,lshadow) * 100
+    else:
+        ushadow = high-close
+        lshadow = open_-low
+        diff = relative_dif(ushadow,lshadow) * 100
 
-  if diff > 5.0:
-    return False
-  else:
-    shadow_center = 0.5 * (high+low)
-    body_center = 0.5 * (open_+close)
-    diff = relative_dif(shadow_center,body_center) * 100
+    if diff > 5.0:
+        return False
+    else:
+        shadow_center = 0.5 * (high+low)
+        body_center = 0.5 * (open_+close)
+        diff = relative_dif(shadow_center,body_center) * 100
 
     if diff > 5.0:
       return False
@@ -133,7 +201,7 @@ def spinning_top(data, percent_classifier = 3.0):
     if ratio < percent_classifier and body_size != 0:
       return True
 
-  return False
+    return False
 
 def marubozo(data):
     ''' Marubozo pattern matching for single point
@@ -192,7 +260,6 @@ def doji(data, specifier = 'auto'):
 
     return smart_return(specifier, specifier_name)
 
-
 def single_patterns(data, specifier = 'auto', ratio_classifier = 2.5):
     ''' Classify single patterns. Ratio classifier is defined as ratio between shadows and body
 
@@ -233,7 +300,6 @@ def single_patterns(data, specifier = 'auto', ratio_classifier = 2.5):
     # return based on specifier
     return smart_return(specifier, specifier_name)
 
-
 ''' Two candlestick patterns '''
 
 def engulfing_patterns(data1, data2, specifier = 'auto', ratio_classifier = 1.5):
@@ -273,7 +339,6 @@ def engulfing_patterns(data1, data2, specifier = 'auto', ratio_classifier = 1.5)
             specifier_name = animal2 + '_' + 'engulfing'
 
     return smart_return(specifier, specifier_name)
-
 
 def tweezer_patterns(data1, data2, specifier = 'auto', dif_classifier = 3.0):
     ''' Classify tweezer double patterns. Difference classifier is percent difference
@@ -399,39 +464,39 @@ def soldier_crow_patterns(data1, data2, data3, trend, specifier = 'auto', wick_s
             bool, string of matched pattern
 
     '''
-        if trend == None:
-            return smart_return(specifier, None)
+    if trend == None:
+        return smart_return(specifier, None)
 
-        _, body1, _, animal1 = body_form(data1)
-        ushadow2, body2, lshadow2, animal2 = body_form(data2)
-        ushadow3, body3, lshadow3, animal3 = body_form(data3)
+    _, body1, _, animal1 = body_form(data1)
+    ushadow2, body2, lshadow2, animal2 = body_form(data2)
+    ushadow3, body3, lshadow3, animal3 = body_form(data3)
 
-        close1 = data1[4]
-        open_2 = data2[1]
-        close2 = data2[4]
-        open_3 = data3[1]
-        close3 = data3[4]
+    close1 = data1[4]
+    open_2 = data2[1]
+    close2 = data2[4]
+    open_3 = data3[1]
+    close3 = data3[4]
 
-        specifier_name = None
+    specifier_name = None
 
-        this_trend = trend_identifier(data1,data2,data3)
+    this_trend = trend_identifier(data1,data2,data3)
 
-        if trend == 'downtrend' and this_trend == 'uptrend' and \
-            animal1 == 'bullish' and animal2 == 'bullish' and \
-            animal3 == 'bullish' and body1 < body2 and body2 < body3 and \
-            close1<= open_2 and close2 <= open_3 and ushadow2/body2 <= wick_size_ratio and \
-            lshadow2/body2 <= wick_size_ratio and lshadow3/body3 <= wick_size_ratio and \
-            ushadow3/body3 <= wick_size_ratio:
-            specifier_name = 'three_white_soldiers'
-        elif trend == 'uptrend' and this_trend == 'downtrend' and \
-            animal1 == 'bearish' and animal2 == 'bearish' and \
-            animal3 == 'bearish' and body1 < body2 and body2 <= body3 and \
-            close1>= open_2 and close2 >= open_3 and ushadow2/body2 <= wick_size_ratio and \
-            lshadow2/body2 <= wick_size_ratio and lshadow3/body3 <= wick_size_ratio and \
-            ushadow3/body3 <= wick_size_ratio:
-            specifier_name = 'three_black_crows'
+    if trend == 'downtrend' and this_trend == 'uptrend' and \
+        animal1 == 'bullish' and animal2 == 'bullish' and \
+        animal3 == 'bullish' and body1 < body2 and body2 < body3 and \
+        close1<= open_2 and close2 <= open_3 and ushadow2/body2 <= wick_size_ratio and \
+        lshadow2/body2 <= wick_size_ratio and lshadow3/body3 <= wick_size_ratio and \
+        ushadow3/body3 <= wick_size_ratio:
+        specifier_name = 'three_white_soldiers'
+    elif trend == 'uptrend' and this_trend == 'downtrend' and \
+        animal1 == 'bearish' and animal2 == 'bearish' and \
+        animal3 == 'bearish' and body1 < body2 and body2 <= body3 and \
+        close1>= open_2 and close2 >= open_3 and ushadow2/body2 <= wick_size_ratio and \
+        lshadow2/body2 <= wick_size_ratio and lshadow3/body3 <= wick_size_ratio and \
+        ushadow3/body3 <= wick_size_ratio:
+        specifier_name = 'three_black_crows'
 
-        return smart_return(specifier, specifier_name)
+    return smart_return(specifier, specifier_name)
 
 def three_inside(data1, data2, data3, trend, specifier = 'auto'):
     ''' Classify inside up/down triple patterns. Trend refers to uptrend or downtrend of the previous points of data.
@@ -459,28 +524,28 @@ def three_inside(data1, data2, data3, trend, specifier = 'auto'):
             bool, string of matched pattern
 
     '''
-        ushadow1, body1, lshadow1, animal1 = body_form(data1)
-        ushadow2, body2, lshadow2, animal2 = body_form(data2)
-        ushadow3, body3, lshadow3, animal3 = body_form(data3)
+    ushadow1, body1, lshadow1, animal1 = body_form(data1)
+    ushadow2, body2, lshadow2, animal2 = body_form(data2)
+    ushadow3, body3, lshadow3, animal3 = body_form(data3)
 
-        open_2 = data2[2]
+    open_2 = data2[2]
 
-        high1 = data1[2]
-        low1 = data1[3]
+    high1 = data1[2]
+    low1 = data1[3]
 
-        close3 = data3[4]
+    close3 = data3[4]
 
-        midpoint1 = data1[3] + lshadow1 + 0.5 * body1
+    midpoint1 = data1[3] + lshadow1 + 0.5 * body1
 
-        specifier_name = None
+    specifier_name = None
 
-        if trend == ' downtrend' and animal1 == 'bearish' and animal2 == 'bullish'and \
-            animal3 == 'bullish' and body1 > body2 and open_2 >= midpoint1 and \
-            close3 > high1:
-            specifier_name = 'three_inside_up'
-        elif trend == ' uptrend' and animal1 == 'bullish' and animal2 == 'bearish'and \
-            animal3 == 'bearish' and body1 > body2 and close_2 <= midpoint1 and \
-            close3 < low1:
-            specifier_name = 'three_inside_down'
-            
-        return smart_return(specifier, specifier_name)
+    if trend == ' downtrend' and animal1 == 'bearish' and animal2 == 'bullish'and \
+        animal3 == 'bullish' and body1 > body2 and open_2 >= midpoint1 and \
+        close3 > high1:
+        specifier_name = 'three_inside_up'
+    elif trend == ' uptrend' and animal1 == 'bullish' and animal2 == 'bearish'and \
+        animal3 == 'bearish' and body1 > body2 and close_2 <= midpoint1 and \
+        close3 < low1:
+        specifier_name = 'three_inside_down'
+
+    return smart_return(specifier, specifier_name)
