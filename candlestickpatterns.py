@@ -19,7 +19,7 @@ def pattern_generate(df):
 
     dates = []
 
-    for j in range(100,len(df)-1):
+    for j in range(20,len(df)-1):
         previous = df.iloc[j-6:j-3].values
         trend = trend_identifier(previous)
         data = df.iloc[j-3:j]
@@ -62,9 +62,9 @@ def candlestick_plot(df, Bollinger_Bands = False, Highlight = None):
         df=df.reset_index()
         bands = df.ix[:,['20MA','Upper Band','Lower Band']]
         MA = [bands['20MA'].as_matrix(),bands['Upper Band'].as_matrix(), bands['Lower Band'].as_matrix()]
-
-        for band in MA:
-             ax2.plot(bars['Date'], band)
+        colors = ['b','c','c']
+        for color, band in zip(colors,MA):
+             ax2.plot(bars['Date'], band,color = color)
 
     if Highlight is not None:
         dates = Highlight['Date'].map(mdates.date2num)
