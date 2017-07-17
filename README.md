@@ -25,4 +25,6 @@ candlestickpatterns.candlestick_plot(df,Bollinger_Bands=True,Highlight=t)
 ```
 Plot Example:
 
-![alt text](img/Figure_1.png)
+The matched patterns are marked with long red lines. Bollinger Bands are also displayed.
+
+![alt text](Figure_1.png)
