@@ -1,9 +1,11 @@
 import candlestickpatterns
 import quandl
 from datetime import datetime
+import pandas as pd
 
-t1 = datetime.now().strftime("%Y-%m-%d")
-df = quandl.get('BCHARTS/BITSTAMPUSD',start_date = "2015-01-01",end_date=t1)
+df = pd.read_json('test_data.json')
+df = df.sort_values(by=['Date'])
 
 t=candlestickpatterns.pattern_generate(df)
-#candlestickpatterns.candlestick_plot(df,Highlight=t)
+
+print(t.head())
